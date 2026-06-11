@@ -12,6 +12,15 @@ pub struct AgentConfig {
     pub model_config: HashMap<String, String>,
 }
 
+impl Default for AgentConfig {
+    fn default() -> Self {
+        AgentConfig {
+            model: "claude-sonnet-4-20250514".to_string(),
+            model_config: HashMap::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StateConfig {
     #[serde(default = "default_state_file")]

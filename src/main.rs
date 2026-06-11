@@ -1,7 +1,10 @@
 mod agent;
+mod checker;
 mod cli;
 mod config;
+mod engine;
 mod goal;
+mod plan;
 mod state;
 mod wizard;
 
@@ -29,10 +32,9 @@ fn main() -> Result<()> {
 
     let config_path = Path::new(&cli.state_dir).join("config.toml");
     if config_path.exists() {
-        let _config = config::load_config(&cli)?;
+        let config = config::load_config(&cli)?;
         println!("{}", "Config loaded. Starting loop...".green());
-        eprintln!("Engine loop not yet implemented — placeholder.");
-        Ok(())
+        engine::run_loop(&config, &cli.state_dir)
     } else {
         wizard::run_wizard(&cli)
     }
@@ -106,7 +108,8 @@ fn cmd_status(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-fn run_headless(_cli: &Cli) -> Result<()> {
-    eprintln!("Headless mode — engine loop not yet implemented.");
-    Ok(())
+#[allow(dead_code)]
+fn run_headless(cli: &Cli) -> Result<()> {
+    let config = config::load_config(cli)?;
+    engine::run_loop(&config, &cli.state_dir)
 }

@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Goal {
     pub raw: String,
     pub path: String,
