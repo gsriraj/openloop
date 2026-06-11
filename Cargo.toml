@@ -7,6 +7,7 @@ repository = "https://github.com/gsriraj/openloop"
 homepage = "https://github.com/gsriraj/openloop"
 documentation = "https://docs.rs/openloop"
 license = "MIT"
+rust-version = "1.85.0"
 keywords = ["loop-engineering", "agent", "cli", "automation"]
 categories = ["command-line-utilities", "development-tools"]
 

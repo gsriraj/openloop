@@ -4,15 +4,32 @@ on:
   schedule:
     - cron: "0 0 * * 0"
   push:
+    branches: [main]
     paths: ["Cargo.lock"]
   pull_request:
+    branches: [main]
     paths: ["Cargo.lock"]
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
   audit:
+    name: Advisory Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - run: cargo install cargo-audit
-      - run: cargo audit
+      - uses: rustsec/audit-check@v1.4.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  deny:
+    name: License + Ban Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --all-features
