@@ -11,19 +11,13 @@ pub struct Cli {
     #[arg(long, help = "Run fully autonomously (no human confirmations)")]
     pub autopilot: bool,
 
-    #[arg(
-        long,
-        help = "Scaffold .openloop/ config directory + example GOAL.md"
-    )]
+    #[arg(long, help = "Scaffold .openloop/ config directory + example GOAL.md")]
     pub init: bool,
 
     #[arg(long, help = "Display current loop state and progress")]
     pub status: bool,
 
-    #[arg(
-        long,
-        help = "Allow parallel agent execution (uses git worktrees)"
-    )]
+    #[arg(long, help = "Allow parallel agent execution (uses git worktrees)")]
     pub parallel: bool,
 
     #[arg(
@@ -50,11 +44,7 @@ pub struct Cli {
     )]
     pub model_config: Vec<String>,
 
-    #[arg(
-        long,
-        default_value = "50",
-        help = "Max loop iterations (default: 50)"
-    )]
+    #[arg(long, default_value = "50", help = "Max loop iterations (default: 50)")]
     pub max_iterations: u32,
 
     #[arg(

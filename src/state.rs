@@ -73,8 +73,7 @@ impl LoopState {
             self.last_result,
         );
 
-        std::fs::write(path, &md)
-            .with_context(|| format!("Failed to write {}", state_path))?;
+        std::fs::write(path, &md).with_context(|| format!("Failed to write {}", state_path))?;
 
         Ok(())
     }
@@ -117,7 +116,15 @@ fn chrono_now() -> String {
     let minutes = (time_secs % 3600) / 60;
     let seconds = time_secs % 60;
 
-    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", 1970 + days / 365, 1, 1, hours, minutes, seconds)
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        1970 + days / 365,
+        1,
+        1,
+        hours,
+        minutes,
+        seconds
+    )
 }
 
 #[cfg(test)]

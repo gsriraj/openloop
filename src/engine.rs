@@ -31,7 +31,7 @@ pub fn run_loop(config: &Config, state_dir: &str) -> Result<()> {
         (state.iteration + 1).to_string().cyan()
     );
 
-    let plan_agent = build_agent_config(&config, true)?;
+    let plan_agent = build_agent_config(config, true)?;
 
     for iteration in state.iteration + 1..=config.max_iterations {
         println!(
@@ -63,39 +63,54 @@ pub fn run_loop(config: &Config, state_dir: &str) -> Result<()> {
         }
 
         // Phase 2: Dispatch
-        let exec_agent = build_agent_config(&config, true)?;
-        println!("\n{} {}...", "Executing".yellow().bold(), plan.summary.dimmed());
+        let exec_agent = build_agent_config(config, true)?;
+        println!(
+            "\n{} {}...",
+            "Executing".yellow().bold(),
+            plan.summary.dimmed()
+        );
         let start = Instant::now();
 
-        let result = run_agent_with_stdin(&exec_agent, &format!(
-            r#"Goal: {}
+        let result = run_agent_with_stdin(
+            &exec_agent,
+            &format!(
+                r#"Goal: {}
 State: {}
 Plan: {}
 
 Execute the plan above. Make concrete changes to the codebase.
 Report what you did and any issues encountered."#,
-            goal.raw,
-            state_to_string(&state),
-            plan.summary
-        ))?;
+                goal.raw,
+                state_to_string(&state),
+                plan.summary
+            ),
+        )?;
 
         let elapsed = start.elapsed();
         println!(
             "  {} Done in {:.1}s (exit: {})",
-            if result.success() { "✔".green() } else { "✘".red() },
+            if result.success() {
+                "✔".green()
+            } else {
+                "✘".red()
+            },
             elapsed.as_secs_f64(),
             result.exit_code.to_string().yellow()
         );
 
         // Phase 3: Verify
-        let verifier_agent = build_agent_config(&config, false)?;
+        let verifier_agent = build_agent_config(config, false)?;
         println!("{} Verifying goal progress...", "  🔍".yellow());
 
-        let verification = checker::verify_goal(&verifier_agent, &goal.raw, &format!(
-            "## Last Plan\n{}\n\n## Last Result\n{}",
-            plan.summary,
-            truncate(&result.stdout, 2000)
-        ))?;
+        let verification = checker::verify_goal(
+            &verifier_agent,
+            &goal.raw,
+            &format!(
+                "## Last Plan\n{}\n\n## Last Result\n{}",
+                plan.summary,
+                truncate(&result.stdout, 2000)
+            ),
+        )?;
 
         if verification.goal_met {
             println!("\n{}", "✓ Goal achieved!".green().bold());
@@ -140,7 +155,12 @@ fn build_agent_config(config: &Config, planning: bool) -> Result<AgentConfig> {
         .cloned()
         .unwrap_or_else(|| "opencode".to_string());
 
-    let agent_cfg = config.agents.configs.get(&name).cloned().unwrap_or_default();
+    let agent_cfg = config
+        .agents
+        .configs
+        .get(&name)
+        .cloned()
+        .unwrap_or_default();
 
     let model = if planning {
         agent_cfg.model.clone()

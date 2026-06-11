@@ -42,8 +42,7 @@ fn main() -> Result<()> {
 
 fn cmd_init(cli: &Cli) -> Result<()> {
     let dir = Path::new(&cli.state_dir);
-    std::fs::create_dir_all(dir)
-        .with_context(|| format!("Failed to create {}", cli.state_dir))?;
+    std::fs::create_dir_all(dir).with_context(|| format!("Failed to create {}", cli.state_dir))?;
 
     let config_path = dir.join("config.toml");
     if !config_path.exists() {
@@ -66,7 +65,11 @@ file = "state.md"
             .with_context(|| format!("Failed to write {}", config_path.display()))?;
         println!("  {} {}", "✔".green(), config_path.display());
     } else {
-        println!("  {} {} (already exists)", "•".yellow(), config_path.display());
+        println!(
+            "  {} {} (already exists)",
+            "•".yellow(),
+            config_path.display()
+        );
     }
 
     let goal_path = Path::new("GOAL.md");
@@ -85,7 +88,11 @@ Build a CLI tool that ...
             .with_context(|| format!("Failed to write {}", goal_path.display()))?;
         println!("  {} {}", "✔".green(), goal_path.display());
     } else {
-        println!("  {} {} (already exists)", "•".yellow(), goal_path.display());
+        println!(
+            "  {} {} (already exists)",
+            "•".yellow(),
+            goal_path.display()
+        );
     }
 
     println!(

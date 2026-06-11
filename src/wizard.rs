@@ -13,7 +13,10 @@ use crate::config;
 
 pub fn run_wizard(cli: &Cli) -> Result<()> {
     println!("\n{}", "╭─────────────────────────────────────╮".cyan());
-    println!("{}", "│     OpenLoop Setup Wizard           │".cyan().bold());
+    println!(
+        "{}",
+        "│     OpenLoop Setup Wizard           │".cyan().bold()
+    );
     println!("{}", "╰─────────────────────────────────────╯".cyan());
     println!();
 
@@ -21,10 +24,7 @@ pub fn run_wizard(cli: &Cli) -> Result<()> {
     let detected = discover_agents()?;
 
     if detected.is_empty() {
-        eprintln!(
-            "{} No supported agent CLIs found on $PATH.",
-            "⚠".yellow()
-        );
+        eprintln!("{} No supported agent CLIs found on $PATH.", "⚠".yellow());
         eprintln!(
             "  Install one of: {}",
             "opencode, copilot, claude, aider, sweep".dimmed()
@@ -56,30 +56,29 @@ pub fn run_wizard(cli: &Cli) -> Result<()> {
     let autopilot = select_execution_mode()?;
 
     // Step 6: Write config
-    let config = build_config(
-        &selected_agents,
-        &plan_model,
-        &verify_model,
-        autopilot,
-        cli,
-    )?;
+    let config = build_config(&selected_agents, &plan_model, &verify_model, autopilot, cli)?;
 
     let state_dir = &cli.state_dir;
     std::fs::create_dir_all(state_dir)
         .with_context(|| format!("Failed to create {}", state_dir))?;
     config::save_config(&config, state_dir)?;
-    println!("  {} {}", "✔".green(), format!("{}/config.toml", state_dir).dimmed());
+    println!(
+        "  {} {}",
+        "✔".green(),
+        format!("{}/config.toml", state_dir).dimmed()
+    );
 
     // Write GOAL.md
     let goal_path = Path::new(&config.goal);
     std::fs::write(goal_path, &goal_content)
         .with_context(|| format!("Failed to write {}", goal_path.display()))?;
-    println!("  {} {}", "✔".green(), goal_path.display().to_string().dimmed());
-
     println!(
-        "\n{} Setup complete! Starting the loop...",
-        "✓".green()
+        "  {} {}",
+        "✔".green(),
+        goal_path.display().to_string().dimmed()
     );
+
+    println!("\n{} Setup complete! Starting the loop...", "✓".green());
 
     // Step 7: Start the loop (placeholder)
     eprintln!("Engine loop not yet implemented — placeholder.");
@@ -87,10 +86,7 @@ pub fn run_wizard(cli: &Cli) -> Result<()> {
 }
 
 fn goal_co_creation(agent: &AgentConfig) -> Result<String> {
-    println!(
-        "\n{} Step 1: Define your goal",
-        "──".bright_blue()
-    );
+    println!("\n{} Step 1: Define your goal", "──".bright_blue());
 
     // First, detect which editor to use
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
@@ -169,7 +165,10 @@ Output ONLY the questions, one per line, with no preamble or numbering."#,
         println!("  {}", line);
     }
     if draft.lines().count() > 15 {
-        println!("  {}...", format!("({} more lines)", draft.lines().count() - 15).dimmed());
+        println!(
+            "  {}...",
+            format!("({} more lines)", draft.lines().count() - 15).dimmed()
+        );
     }
 
     let edit = Confirm::new("Edit the goal?")
@@ -198,10 +197,7 @@ Output ONLY the questions, one per line, with no preamble or numbering."#,
 }
 
 fn select_agents(detected: &[AgentConfig]) -> Result<Vec<AgentConfig>> {
-    println!(
-        "\n{} Step 2: Select agent CLIs",
-        "──".bright_blue()
-    );
+    println!("\n{} Step 2: Select agent CLIs", "──".bright_blue());
 
     if detected.len() == 1 {
         println!(
@@ -226,12 +222,9 @@ fn select_agents(detected: &[AgentConfig]) -> Result<Vec<AgentConfig>> {
 }
 
 fn select_models(_agents: &[AgentConfig]) -> Result<(String, String, HashMap<String, String>)> {
-    println!(
-        "\n{} Step 3: Model configuration",
-        "──".bright_blue()
-    );
+    println!("\n{} Step 3: Model configuration", "──".bright_blue());
 
-    let models = vec![
+    let models = [
         "claude-sonnet-4-20250514",
         "claude-sonnet-4-20250514",
         "gpt-4o",
@@ -263,15 +256,9 @@ fn select_models(_agents: &[AgentConfig]) -> Result<(String, String, HashMap<Str
 }
 
 fn select_execution_mode() -> Result<bool> {
-    println!(
-        "\n{} Step 4: Execution mode",
-        "──".bright_blue()
-    );
+    println!("\n{} Step 4: Execution mode", "──".bright_blue());
 
-    let options = vec![
-        "Step-by-step (recommended for first run)",
-        "Full autopilot",
-    ];
+    let options = vec!["Step-by-step (recommended for first run)", "Full autopilot"];
 
     let selection = Select::new("How should the loop run?", options)
         .with_starting_cursor(0)
@@ -291,10 +278,7 @@ fn build_config(
 
     for agent in agents {
         let mut model_config = HashMap::new();
-        model_config.insert(
-            "verify_model".to_string(),
-            verify_model.to_string(),
-        );
+        model_config.insert("verify_model".to_string(), verify_model.to_string());
 
         agent_configs.insert(
             agent.name.clone(),

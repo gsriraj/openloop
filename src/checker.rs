@@ -42,7 +42,11 @@ fn parse_verification(output: &str) -> Result<VerificationResult> {
     }
 
     if reason.is_empty() {
-        reason = if goal_met { "Goal appears to be met".into() } else { "Goal not yet met".into() };
+        reason = if goal_met {
+            "Goal appears to be met".into()
+        } else {
+            "Goal not yet met".into()
+        };
     }
 
     Ok(VerificationResult {
