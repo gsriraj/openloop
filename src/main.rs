@@ -1,19 +1,13 @@
-mod agent;
-mod checker;
-mod cli;
-mod config;
-mod engine;
-mod goal;
-mod plan;
-mod state;
-mod wizard;
-
 use std::path::Path;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use cli::Cli;
 use colored::Colorize;
+
+use openloop::cli::Cli;
+use openloop::config;
+use openloop::engine;
+use openloop::wizard;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
