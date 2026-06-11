@@ -12,7 +12,7 @@ pub struct Worktree {
 impl Worktree {
     pub fn create(base_branch: &str, task_name: &str) -> Result<Self> {
         let branch = format!("openloop-{}-{}", task_name, std::process::id());
-        let worktree_path = PathBuf::from(format!("/tmp/openloop-{}", branch));
+        let worktree_path = std::env::temp_dir().join(format!("openloop-{}", branch));
 
         // Ensure we're in a git repo
         let repo_root = get_repo_root()?;

@@ -116,6 +116,7 @@ fn test_status_no_state() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn test_headless_with_mock_agent() {
     let tmpdir = tempfile::tempdir().expect("Failed to create temp dir");
