@@ -4,7 +4,7 @@ use anyhow::Result;
 use colored::Colorize;
 
 use crate::agent::runner::run_agent_with_stdin;
-use crate::agent::types::AgentConfig;
+use crate::agent::types::{AgentConfig, AgentResult};
 use crate::checker;
 use crate::config::Config;
 use crate::goal::Goal;
@@ -62,29 +62,60 @@ pub fn run_loop(config: &Config, state_dir: &str) -> Result<()> {
             }
         }
 
-        // Phase 2: Dispatch
-        let exec_agent = build_agent_config(config, true)?;
-        println!(
-            "\n{} {}...",
-            "Executing".yellow().bold(),
-            plan.summary.dimmed()
-        );
+        // Phase 2: Dispatch (parallel or single)
+        use crate::parallel;
+
+        let parallel_plan = if config.parallel {
+            parallel::split_work(config, &goal.raw, &state_to_string(&state))?
+        } else {
+            None
+        };
+
         let start = Instant::now();
 
-        let result = run_agent_with_stdin(
-            &exec_agent,
-            &format!(
-                r#"Goal: {}
+        let (result, _used_parallel) = if let Some(pp) = parallel_plan {
+            println!("{} {}", "Parallel:".cyan().bold(), pp.sub_tasks.len());
+            for (i, task) in pp.sub_tasks.iter().enumerate() {
+                println!("  {} [Agent {}] {}", "▸".cyan(), i + 1, task);
+            }
+            let results = parallel::execute_parallel(pp, config)?;
+            let combined = results
+                .iter()
+                .map(|r| format!("--- {} ---\n{}", r.agent, r.stdout))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let merged_result = AgentResult {
+                agent: "parallel".into(),
+                exit_code: results.iter().all(|r| r.success()) as i32,
+                stdout: combined,
+                stderr: String::new(),
+                duration_ms: results.iter().map(|r| r.duration_ms).sum(),
+            };
+            (merged_result, true)
+        } else {
+            let exec_agent = build_agent_config(config, true)?;
+            println!(
+                "\n{} {}...",
+                "Executing".yellow().bold(),
+                plan.summary.dimmed()
+            );
+            let result = run_agent_with_stdin(
+                &exec_agent,
+                &format!(
+                    r#"Goal: {}
 State: {}
 Plan: {}
 
 Execute the plan above. Make concrete changes to the codebase.
 Report what you did and any issues encountered."#,
-                goal.raw,
-                state_to_string(&state),
-                plan.summary
-            ),
-        )?;
+                    goal.raw,
+                    state_to_string(&state),
+                    plan.summary
+                ),
+            )?;
+            (result, false)
+        };
 
         let elapsed = start.elapsed();
         println!(

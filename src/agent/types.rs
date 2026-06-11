@@ -9,6 +9,16 @@ pub struct AgentConfig {
     pub model_config: HashMap<String, String>,
 }
 
+impl Default for AgentConfig {
+    fn default() -> Self {
+        AgentConfig {
+            name: String::new(),
+            model: "default".to_string(),
+            model_config: HashMap::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentResult {
     pub agent: String,

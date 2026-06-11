@@ -26,6 +26,8 @@ pub mod cli;
 pub mod config;
 pub mod engine;
 pub mod goal;
+pub mod parallel;
 pub mod plan;
 pub mod state;
 pub mod wizard;
+pub mod worktree;
