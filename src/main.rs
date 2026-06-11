@@ -1,6 +1,8 @@
 mod agent;
 mod cli;
 mod config;
+mod goal;
+mod state;
 mod wizard;
 
 use std::path::Path;
