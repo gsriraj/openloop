@@ -274,65 +274,85 @@ inquire = "0.7"
 
 ---
 
-### Phase 2 — Live TUI
+### Phase 2 — Security, Cross-Platform, and TUI
 
-After the core is stable, replace basic log output with a `ratatui` split-pane view:
+#### Security Scanning
 
-- Top pane: current plan / iteration summary
-- Bottom pane: live agent output stream
-- Status bar: iteration count, goal check result, elapsed time
-- Hotkeys: `p` pause, `s` skip iteration, `q` quit
+| Tool | Config | What |
+|------|--------|------|
+| [`cargo-deny`](https://embarkstudios.github.io/cargo-deny/) | `deny.toml` | Advisory DB (rustsec), license policy (MIT/Apache-2.0/BSD/ISC allowed, GPL denied), crate bans, duplicate version detection |
+| [`rustsec/audit-check`](https://github.com/rustsec/audit-check) | `.github/workflows/audit.yml` | Runs on push + weekly schedule; fails on new vulnerabilities |
+| Dependabot | `.github/dependabot.yml` | Weekly Cargo + GitHub Actions dependency updates |
 
----
+#### Cross-Platform Support
 
-### Open Source & Production Readiness
+| Platform | Targets | CI Runner | Packaging |
+|----------|---------|-----------|-----------|
+| Linux | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` | `ubuntu-latest` | `.tar.gz` |
+| macOS | `x86_64-apple-darwin`, `aarch64-apple-darwin` | `macos-13` (Intel), `macos-latest` (ARM) | `.tar.gz` |
+| Windows | `x86_64-pc-windows-msvc` | `windows-latest` | `.zip` |
 
-#### Repository Scaffolding
+Cross-platform considerations addressed:
+- `std::env::temp_dir()` instead of hardcoded `/tmp`
+- `#[cfg(unix)]` gated symlink-dependent tests
+- `.gitattributes` for consistent line endings (LF on Unix, CRLF on Windows)
+- `rust-toolchain.toml` with cross-compilation targets and MSRV 1.85.0
 
-| File | What |
-|------|------|
-| `.github/ISSUE_TEMPLATE/bug_report.md` | Structured bug report form |
-| `.github/ISSUE_TEMPLATE/feature_request.md` | Feature request template |
-| `.github/PULL_REQUEST_TEMPLATE.md` | PR checklist |
-| `.github/dependabot.yml` | Auto-update Rust + Action dependencies |
-| `CONTRIBUTING.md` | Build, test, commit convention, PR process |
-| `CODE_OF_CONDUCT.md` | Contributor Covenant v2.1 |
-| `SECURITY.md` | Vulnerability reporting |
-
-#### Commit Convention
-
-All commits follow Conventional Commits enforced by commitlint CI:
+#### Release Branch Strategy
 
 ```
-feat: add interactive setup wizard
-fix: handle missing agent CLI gracefully
-docs: update README with wizard flow
-test: add integration test for wizard config output
-chore: bump clap to 4.5
+main
+  └── v0.1.x    ← cut before tagging v0.1.0
+        └── v0.1.0 (tag)
+
+main ← feature development
+v0.x.x ← release branch (bugfixes only, cherry-pick to main)
 ```
 
-#### Testing Strategy
+Release process:
+1. Cut release branch (`v0.1.x`) from `main`
+2. Tag (`v0.1.0`) from release branch
+3. CI builds 5 targets, packages, generates checksums, creates GitHub Release
+4. CI publishes to crates.io via `cargo publish`
+5. Bugfix PRs target release branch; cherry-pick to `main`
 
-| Level | What | Where |
-|-------|------|-------|
-| Unit tests | Every module — cli, config, state, agent/runner, agent/discovery, goal | `#[cfg(test)] mod tests` in each source file |
-| Integration tests | End-to-end: spawn binary with `--help`, `--init`, mock agent scripts | `tests/` directory |
-| Property-based | Config round-trip, state serialization | `proptest` in `tests/proptest.rs` |
-| Mock agent | Shell script that returns canned responses | `tests/fixtures/mock-agent.sh` |
-
-#### CI/CD (GitHub Actions)
+#### Phase 2 CI/CD
 
 | Workflow | Triggers | What |
 |----------|----------|------|
-| `ci.yml` | push + PR | `cargo check` → `cargo fmt --check` → `cargo clippy --deny warnings` → `cargo test` |
-| `audit.yml` | weekly + Dependabot | `cargo audit` |
-| `release.yml` | tag `v*` | Build binaries (Linux + macOS, x86_64 + aarch64), create GitHub Release, publish to crates.io |
+| `ci.yml` | push + PR | `cargo check` → `cargo fmt` → `cargo clippy` → `cargo deny` → test (Linux + macOS + Windows) |
+| `audit.yml` | push (Cargo.lock) + weekly | Advisory check (`rustsec/audit-check`) + license/ban check (`cargo-deny`) |
+| `release.yml` | tag `v*` | Build 5 targets, package (.tar.gz / .zip), SHA256 checksums, GitHub Release, crates.io publish |
 
-#### Documentation
+#### Live TUI (ratatui)
 
-| Where | What |
-|-------|------|
-| README.md | Badges (CI, crate version, docs.rs, license), quick install, usage, link to docs.rs |
-| docs.rs | All public APIs documented with `///` doc comments |
-| Cargo.toml | `description`, `repository`, `homepage`, `documentation`, `keywords`, `categories`, `license` |
-| `--help` output | Clear subcommand and flag descriptions |
+After security + cross-platform work is complete, replace log output with a terminal UI:
+
+- **Dependency**: `ratatui = "0.29"` (uses crossterm, already transitive via inquire)
+- **Architecture**: `src/tui.rs` with split-pane view
+  - Top pane: current plan / iteration summary
+  - Bottom pane: live agent output stream (scrollable)
+  - Status bar: iteration count, goal check result, elapsed time
+- **Hotkeys**: `p` pause, `s` skip iteration, `q` quit
+- **Integration**: `engine.rs` calls `tui::run()` instead of `println!()`; TUI exposes channel for agent output
+
+#### Implementation Order
+
+| Step | What |
+|------|------|
+| 1 | Cross-platform fixes: `temp_dir()`, `#[cfg(unix)]`, `.gitattributes`, `rust-toolchain.toml` |
+| 2 | Security scanning: `deny.toml`, audit workflow, CI deny job |
+| 3 | Multi-platform CI: linux + macos + windows test matrix, 5-target release pipeline |
+| 4 | Release branch strategy: v0.1.x branch, tagging, crates.io publish |
+| 5 | Live TUI: `src/tui.rs`, wire into engine, hotkey handling |
+| 6 | Package managers: Homebrew formula, winget manifest, install.sh |
+
+#### Commit Sequence (Phase 2)
+
+```
+1. chore: cross-platform fixes and MSRV toolchain
+2. chore: add security scanning and multi-platform CI
+3. feat: implement live TUI with ratatui
+4. chore: set up release branches and v0.1.0 tag
+5. docs: add install.sh, Homebrew tap, winget manifest
+```
