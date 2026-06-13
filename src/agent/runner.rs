@@ -120,6 +120,19 @@ fn build_agent_args(agent: &AgentConfig, prompt: &str) -> Vec<String> {
             agent.model.clone(),
         ],
         "claude" => vec!["-p".to_string(), prompt.to_string()],
+        "hermes" => vec![
+            "chat".to_string(),
+            "-q".to_string(),
+            prompt.to_string(),
+            "--model".to_string(),
+            agent.model.clone(),
+        ],
+        "pi" => vec![
+            "-p".to_string(),
+            prompt.to_string(),
+            "--model".to_string(),
+            agent.model.clone(),
+        ],
         _ => vec![
             "--model".to_string(),
             agent.model.clone(),

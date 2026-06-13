@@ -67,7 +67,7 @@ jobs:
             > "openloop-${{ matrix.target }}.${{ matrix.pkg }}.sha256"
 
       - name: Upload
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             target/${{ matrix.target }}/release/openloop-${{ matrix.target }}.${{ matrix.pkg }}
@@ -75,6 +75,7 @@ jobs:
 
   publish:
     name: Publish to crates.io
+    if: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
     runs-on: ubuntu-latest
     needs: release
     steps:

@@ -4,7 +4,9 @@ use anyhow::Result;
 
 use super::types::AgentConfig;
 
-const KNOWN_AGENTS: &[&str] = &["opencode", "copilot", "claude", "aider", "sweep"];
+const KNOWN_AGENTS: &[&str] = &[
+    "opencode", "copilot", "claude", "aider", "sweep", "hermes", "pi",
+];
 
 pub fn discover_agents() -> Result<Vec<AgentConfig>> {
     let mut agents = Vec::new();
@@ -27,8 +29,30 @@ pub fn discover_models(agent_name: &str) -> Result<Vec<String>> {
         "opencode" => discover_opencode_models(),
         "copilot" => Ok(curated_copilot_models()),
         "claude" => Ok(curated_claude_models()),
+        "hermes" => Ok(curated_hermes_models()),
+        "pi" => Ok(curated_pi_models()),
         _ => Ok(vec![default_model(agent_name)]),
     }
+}
+
+fn curated_hermes_models() -> Vec<String> {
+    vec![
+        "anthropic/claude-sonnet-4".into(),
+        "anthropic/claude-haiku-4.5".into(),
+        "anthropic/claude-opus-4".into(),
+        "openai/gpt-4o".into(),
+        "openai/gpt-4o-mini".into(),
+        "google/gemini-flash-latest".into(),
+    ]
+}
+
+fn curated_pi_models() -> Vec<String> {
+    vec![
+        "claude-sonnet-4-20250514".into(),
+        "claude-haiku-4.5".into(),
+        "gpt-4o".into(),
+        "gpt-4o-mini".into(),
+    ]
 }
 
 fn discover_opencode_models() -> Result<Vec<String>> {
@@ -99,6 +123,8 @@ pub fn default_model(agent: &str) -> String {
         "claude" => "claude-sonnet-4-20250514",
         "aider" => "claude-sonnet-4-20250514",
         "sweep" => "gpt-4o",
+        "hermes" => "anthropic/claude-sonnet-4",
+        "pi" => "claude-sonnet-4-20250514",
         _ => "default",
     }
     .to_string()
