@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::time::Instant;
 
 use anyhow::Result;
@@ -43,7 +44,14 @@ pub fn run_loop(config: &Config, state_dir: &str) -> Result<()> {
         );
 
         // Phase 1: Plan
+        print!("  {} Planning next step...", "⏳".yellow());
+        std::io::stdout().flush().ok();
         let plan = plan::plan_next_step(&plan_agent, &goal.raw, &state_to_string(&state))?;
+        print!(
+            "\r  {} Planned                              \n",
+            "✓".green()
+        );
+        std::io::stdout().flush().ok();
         println!("\n{} {}", "Plan:".green().bold(), plan.summary);
         for task in &plan.sub_tasks {
             println!("  {} {}", "→".cyan(), task);
@@ -95,11 +103,12 @@ pub fn run_loop(config: &Config, state_dir: &str) -> Result<()> {
             (merged_result, true)
         } else {
             let exec_agent = build_agent_config(config, true)?;
-            println!(
-                "\n{} {}...",
-                "Executing".yellow().bold(),
-                plan.summary.dimmed()
+            print!(
+                "  {} Executing: {}",
+                "⏳".yellow(),
+                truncate(&plan.summary, 50)
             );
+            std::io::stdout().flush().ok();
             let result = run_agent_with_stdin(
                 &exec_agent,
                 &format!(
@@ -118,10 +127,10 @@ Report what you did and any issues encountered."#,
         };
 
         let elapsed = start.elapsed();
-        println!(
-            "  {} Done in {:.1}s (exit: {})",
+        print!(
+            "\r  {} Executed in {:.1}s (exit: {})      \n",
             if result.success() {
-                "✔".green()
+                "✓".green()
             } else {
                 "✘".red()
             },
@@ -131,7 +140,8 @@ Report what you did and any issues encountered."#,
 
         // Phase 3: Verify
         let verifier_agent = build_agent_config(config, false)?;
-        println!("{} Verifying goal progress...", "  🔍".yellow());
+        print!("  {} Verifying progress...", "⏳".yellow());
+        std::io::stdout().flush().ok();
 
         let verification = checker::verify_goal(
             &verifier_agent,
@@ -142,6 +152,8 @@ Report what you did and any issues encountered."#,
                 truncate(&result.stdout, 2000)
             ),
         )?;
+        print!("\r  {} Verified                              ", "✓".green());
+        std::io::stdout().flush().ok();
 
         if verification.goal_met {
             println!("\n{}", "✓ Goal achieved!".green().bold());
@@ -154,11 +166,8 @@ Report what you did and any issues encountered."#,
             return Ok(());
         }
 
-        println!(
-            "  {} Goal not yet met: {}",
-            "◷".yellow(),
-            verification.reason
-        );
+        println!();
+        println!("  {} {}", "◷".yellow(), verification.reason);
         for item in &verification.remaining_items {
             println!("    {} {}", "•".dimmed(), item);
         }

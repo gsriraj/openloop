@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
@@ -6,10 +7,12 @@ use anyhow::{Context, Result};
 use colored::Colorize;
 use inquire::{Confirm, MultiSelect, Select, Text};
 
-use crate::agent::discovery::discover_agents;
+use crate::agent::discovery::{discover_agents, discover_models};
+use crate::agent::runner::run_noninteractive;
 use crate::agent::types::AgentConfig;
 use crate::cli::Cli;
 use crate::config;
+use crate::engine;
 
 pub fn run_wizard(cli: &Cli) -> Result<()> {
     println!("\n{}", "╭─────────────────────────────────────╮".cyan());
@@ -80,94 +83,36 @@ pub fn run_wizard(cli: &Cli) -> Result<()> {
 
     println!("\n{} Setup complete! Starting the loop...", "✓".green());
 
-    // Step 7: Start the loop (placeholder)
-    eprintln!("Engine loop not yet implemented — placeholder.");
-    Ok(())
+    // Step 7: Start the loop
+    let config = config::load_config(cli)?;
+    engine::run_loop(&config, &cli.state_dir)
 }
 
 fn goal_co_creation(agent: &AgentConfig) -> Result<String> {
     println!("\n{} Step 1: Define your goal", "──".bright_blue());
 
-    // First, detect which editor to use
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
 
-    // Round 1: User describes their idea
-    let idea = Text::new("Describe your project in one sentence:")
-        .with_help_message("e.g. \"A CLI tool to manage todo lists with deadlines and priorities\"")
+    let idea = Text::new("Describe your project in a sentence:")
+        .with_help_message("e.g. \"A CLI to manage todo lists with deadlines\"")
         .prompt()?;
 
-    // Round 2: Agent asks clarifying questions (up to 2 rounds)
     let mut current_idea = idea.clone();
 
-    for _round in 0..2 {
-        let questions_prompt = format!(
-            r#"You are a goal coach helping define a software project.
+    println!(); // spacing before agent interaction
 
-The user's rough idea:
-"{current_idea}"
+    // Try agent-guided goal refinement, fall back to manual if it fails
+    let draft = try_agent_goal_coach(agent, &mut current_idea)
+        .unwrap_or_else(|_| simple_goal_template(&current_idea));
 
-Ask 2-3 concise clarifying questions to help turn this into a well-defined project goal.
-Questions should cover:
-- Scope: what's in vs out of scope
-- Success criteria: how will we know it's done?
-- Platform/constraints: any technical requirements?
-
-Output ONLY the questions, one per line, with no preamble or numbering."#,
-        );
-
-        let questions_result = run_interactive(agent, &questions_prompt)?;
-        let questions: Vec<&str> = questions_result
-            .lines()
-            .filter(|l| {
-                let t = l.trim();
-                !t.is_empty() && t.trim_end_matches(|c: char| c.is_ascii_punctuation()).len() > 5
-            })
-            .collect();
-
-        if questions.is_empty() {
-            break;
-        }
-
-        println!("\nThe agent has some questions:\n");
-        for q in &questions {
-            println!("  {}", q.trim().yellow());
-        }
-
-        let answers = Text::new("Your answers (one paragraph):")
-            .with_help_message("Be specific — this shapes the final goal")
-            .prompt()?;
-
-        current_idea = format!("{}\n\nClarifications:\n{}", current_idea, answers);
-    }
-
-    // Round 3: Agent drafts the GOAL.md
-    println!("\n{} Generating structured goal...", "⏳".yellow());
-
-    let generate_prompt = format!(
-        "You are a goal coach. Based on the following project description, produce a GOAL.md file.\n\
-         The goal should have:\n\
-         1. A clear project description\n\
-         2. 5-10 specific, testable success criteria (as a checklist)\n\
-         3. Out of scope items (what won't be built)\n\
-         4. Technical constraints if applicable\n\
-         \n\
-         Project description:\n\
-         {current_idea}\n\
-         \n\
-         Output ONLY the GOAL.md content, starting with a level-1 heading 'Project Goal'."
-    );
-
-    let draft = run_interactive(agent, &generate_prompt)?;
-
-    // Show the draft and let user edit
     println!("\n{} Draft GOAL.md:\n", "──".bright_blue());
-    for line in draft.lines().take(15) {
+    for line in draft.lines().take(20) {
         println!("  {}", line);
     }
-    if draft.lines().count() > 15 {
+    if draft.lines().count() > 20 {
         println!(
             "  {}...",
-            format!("({} more lines)", draft.lines().count() - 15).dimmed()
+            format!("({} more lines)", draft.lines().count() - 20).dimmed()
         );
     }
 
@@ -196,6 +141,105 @@ Output ONLY the questions, one per line, with no preamble or numbering."#,
     Ok(draft)
 }
 
+fn try_agent_goal_coach(agent: &AgentConfig, current_idea: &mut String) -> Result<String> {
+    // Single round of clarifying questions (avoids repetition)
+    let questions_prompt = format!(
+        r#"You are a goal coach helping define a software project.
+
+The user's rough idea:
+"{current_idea}"
+
+Ask 2-3 concise clarifying questions to help turn this into a well-defined project goal.
+Questions should cover:
+- Scope: what's in vs out of scope
+- Success criteria: how will we know it's done?
+- Platform/constraints: any technical requirements?
+
+Output ONLY the questions, one per line, with no preamble or numbering."#,
+    );
+
+    print!(
+        "  {} Asking agent for clarifying questions...",
+        "⏳".yellow()
+    );
+    std::io::stdout().flush().ok();
+    let questions_result = run_interactive(agent, &questions_prompt)?;
+    print!(
+        "\r  {} Agent responded                        \n",
+        "✓".green()
+    );
+    std::io::stdout().flush().ok();
+
+    let questions: Vec<&str> = questions_result
+        .lines()
+        .filter(|l| {
+            let t = l.trim();
+            !t.is_empty() && t.trim_end_matches(|c: char| c.is_ascii_punctuation()).len() > 5
+        })
+        .collect();
+
+    if !questions.is_empty() {
+        println!("\n{}", "─".repeat(40).dimmed());
+        println!("{}", "The agent asked these clarifying questions:".cyan());
+        println!();
+
+        for q in &questions {
+            println!("  {}", q.trim().yellow());
+        }
+
+        println!();
+        let answers = Text::new("Your answers:")
+            .with_help_message("Be specific — this shapes the final goal")
+            .prompt()?;
+
+        *current_idea = format!("{}\n\nClarifications:\n{}", *current_idea, answers);
+    }
+
+    print!("  {} Generating structured goal...", "⏳".yellow());
+    std::io::stdout().flush().ok();
+
+    let generate_prompt = format!(
+        "You are a goal coach. Based on the following project description, produce a GOAL.md file.\n\
+         The goal should have:\n\
+         1. A clear project description\n\
+         2. 5-10 specific, testable success criteria (as a checklist)\n\
+         3. Out of scope items (what won't be built)\n\
+         4. Technical constraints if applicable\n\
+         \n\
+         Project description:\n\
+         {current_idea}\n\
+         \n\
+         Output ONLY the GOAL.md content, starting with a level-1 heading 'Project Goal'."
+    );
+
+    let draft = run_interactive(agent, &generate_prompt)?;
+    print!(
+        "\r  {} Goal drafted                              \n",
+        "✓".green()
+    );
+    std::io::stdout().flush().ok();
+
+    Ok(draft)
+}
+
+fn simple_goal_template(idea: &str) -> String {
+    format!(
+        "# Project Goal\n\
+         \n\
+         {idea}\n\
+         \n\
+         ## Success Criteria\n\
+         \n\
+         - [ ] Define clear success criteria\n\
+         - [ ] Implement core functionality\n\
+         - [ ] All tests pass\n\
+         \n\
+         ## Out of Scope\n\
+         \n\
+         - TBD\n"
+    )
+}
+
 fn select_agents(detected: &[AgentConfig]) -> Result<Vec<AgentConfig>> {
     println!("\n{} Step 2: Select agent CLIs", "──".bright_blue());
 
@@ -221,18 +265,29 @@ fn select_agents(detected: &[AgentConfig]) -> Result<Vec<AgentConfig>> {
         .collect())
 }
 
-fn select_models(_agents: &[AgentConfig]) -> Result<(String, String, HashMap<String, String>)> {
+fn select_models(agents: &[AgentConfig]) -> Result<(String, String, HashMap<String, String>)> {
     println!("\n{} Step 3: Model configuration", "──".bright_blue());
 
-    let models = [
-        "claude-sonnet-4-20250514",
-        "claude-sonnet-4-20250514",
-        "gpt-4o",
-        "gpt-4o-mini",
-        "claude-3-haiku-20240307",
-    ];
+    let primary_agent = agents
+        .first()
+        .map(|a| &a.name)
+        .map(|s| s.as_str())
+        .unwrap_or("opencode");
 
-    let plan_model = Select::new("Planning model:", models.to_vec())
+    print!(
+        "  {} Fetching available models from {}...",
+        "⏳".yellow(),
+        primary_agent
+    );
+    std::io::stdout().flush().ok();
+    let models = discover_models(primary_agent).unwrap_or_else(|_| fallback_models(primary_agent));
+    print!(
+        "\r  {} {} models available               \n",
+        "✓".green(),
+        models.len()
+    );
+
+    let plan_model = Select::new("Planning model:", models.clone())
         .with_starting_cursor(0)
         .with_help_message("Used for planning steps and executing code")
         .prompt()?;
@@ -245,14 +300,33 @@ fn select_models(_agents: &[AgentConfig]) -> Result<(String, String, HashMap<Str
     let verify_model = if same {
         plan_model.to_string()
     } else {
-        Select::new("Verification model:", models.to_vec())
-            .with_starting_cursor(1)
+        let verify_cursor = 1.min(models.len().saturating_sub(1));
+        Select::new("Verification model:", models)
+            .with_starting_cursor(verify_cursor)
             .with_help_message("Used to check if success criteria are met")
             .prompt()?
             .to_string()
     };
 
     Ok((plan_model.to_string(), verify_model, HashMap::new()))
+}
+
+fn fallback_models(agent: &str) -> Vec<String> {
+    match agent {
+        "opencode" => vec![
+            "openrouter/anthropic/claude-sonnet-4".into(),
+            "openrouter/anthropic/claude-haiku-4.5".into(),
+            "openrouter/anthropic/claude-opus-4".into(),
+            "openrouter/openai/gpt-4o".into(),
+            "openrouter/google/gemini-flash-latest".into(),
+        ],
+        "copilot" => vec![
+            "gpt-4o".into(),
+            "gpt-4o-mini".into(),
+            "claude-sonnet-4-20250514".into(),
+        ],
+        _ => vec!["default".into()],
+    }
 }
 
 fn select_execution_mode() -> Result<bool> {
@@ -305,34 +379,5 @@ fn build_config(
 }
 
 fn run_interactive(agent: &AgentConfig, prompt: &str) -> Result<String> {
-    let output = Command::new(&agent.name)
-        .arg("--model")
-        .arg(&agent.model)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .with_context(|| format!("Failed to spawn '{}'", agent.name))?;
-
-    // Write prompt via stdin
-    if let Some(mut stdin) = output.stdin.as_ref() {
-        use std::io::Write;
-        stdin.write_all(prompt.as_bytes())?;
-    }
-
-    let result = output.wait_with_output()?;
-    let stdout = String::from_utf8_lossy(&result.stdout).to_string();
-
-    // Fall back to arg-based if stdin didn't work
-    if stdout.trim().is_empty() {
-        let result2 = Command::new(&agent.name)
-            .arg("--model")
-            .arg(&agent.model)
-            .arg(prompt)
-            .output()
-            .with_context(|| format!("Failed to run '{}' with arg", agent.name))?;
-        return Ok(String::from_utf8_lossy(&result2.stdout).to_string());
-    }
-
-    Ok(stdout)
+    run_noninteractive(agent, prompt)
 }

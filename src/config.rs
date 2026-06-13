@@ -15,7 +15,7 @@ pub struct AgentConfig {
 impl Default for AgentConfig {
     fn default() -> Self {
         AgentConfig {
-            model: "claude-sonnet-4-20250514".to_string(),
+            model: "openrouter/anthropic/claude-sonnet-4".to_string(),
             model_config: HashMap::new(),
         }
     }

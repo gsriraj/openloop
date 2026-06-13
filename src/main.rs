@@ -27,6 +27,15 @@ fn main() -> Result<()> {
     let config_path = Path::new(&cli.state_dir).join("config.toml");
     if config_path.exists() {
         let config = config::load_config(&cli)?;
+        let goal_path = Path::new(&config.goal);
+        if !goal_path.exists() {
+            println!(
+                "{} Goal file '{}' not found. Starting wizard to recreate.",
+                "⚠".yellow(),
+                config.goal
+            );
+            return wizard::run_wizard(&cli);
+        }
         println!("{}", "Config loaded. Starting loop...".green());
         engine::run_loop(&config, &cli.state_dir)
     } else {
@@ -49,7 +58,7 @@ parallel = false
 enabled = ["opencode"]
 
 [agents.opencode]
-model = "claude-sonnet-4-20250514"
+model = "openrouter/anthropic/claude-sonnet-4"
 model_config = { temperature = 0.7, max_tokens = 8192 }
 
 [state]
