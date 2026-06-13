@@ -11,7 +11,7 @@ use crate::config::Config;
 use crate::goal::Goal;
 use crate::plan;
 use crate::state::LoopState;
-use crate::tui::TuiHandle;
+use crate::tui::{LogStyle, TuiHandle};
 
 pub fn run_loop(config: &Config, state_dir: &str) -> Result<()> {
     run_loop_inner(config, state_dir, None)
@@ -22,8 +22,12 @@ pub fn run_loop_tui(config: &Config, state_dir: &str, handle: &TuiHandle) -> Res
 }
 
 fn output(handle: Option<&TuiHandle>, msg: String) {
+    output_styled(handle, msg, LogStyle::Normal)
+}
+
+fn output_styled(handle: Option<&TuiHandle>, msg: String, style: LogStyle) {
     if let Some(h) = handle {
-        h.push_log(msg);
+        h.push_log(msg, style);
     } else {
         println!("{}", msg);
     }
