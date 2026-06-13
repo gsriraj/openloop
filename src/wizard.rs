@@ -219,7 +219,32 @@ Output ONLY the questions, one per line, with no preamble or numbering."#,
     );
     std::io::stdout().flush().ok();
 
-    Ok(draft)
+    // 3rd pass: quality review — agent checks each criterion
+    print!("  {} Reviewing criteria quality...", "⏳".yellow());
+    std::io::stdout().flush().ok();
+
+    let quality_prompt = format!(
+        "You are a QA engineer reviewing a GOAL.md file. \
+         Review each success criterion against this checklist:\n\
+         - Is it MEASURABLE? (numbers, thresholds — not 'fast' but '< 2s')\n\
+         - Is it TESTABLE? (can a script verify it without human judgment)\n\
+         - Is it SPECIFIC? (no vague terms like 'good UX' — use '60fps, <100ms input lag')\n\
+         \n\
+         For each vague criterion, rewrite it to be measurable and specific.\
+         Keep the same structure. Output the full improved GOAL.md.\n\
+         \n\
+         GOAL.md to review:\n\
+         {draft}"
+    );
+
+    let improved = run_interactive(agent, &quality_prompt).unwrap_or(draft);
+    print!(
+        "\r  {} Criteria quality verified                \n",
+        "✓".green()
+    );
+    std::io::stdout().flush().ok();
+
+    Ok(improved)
 }
 
 fn simple_goal_template(idea: &str) -> String {

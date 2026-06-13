@@ -29,5 +29,6 @@ pub mod goal;
 pub mod parallel;
 pub mod plan;
 pub mod state;
+pub mod tui;
 pub mod wizard;
 pub mod worktree;

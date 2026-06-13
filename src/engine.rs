@@ -11,50 +11,103 @@ use crate::config::Config;
 use crate::goal::Goal;
 use crate::plan;
 use crate::state::LoopState;
+use crate::tui::TuiHandle;
 
 pub fn run_loop(config: &Config, state_dir: &str) -> Result<()> {
+    run_loop_inner(config, state_dir, None)
+}
+
+pub fn run_loop_tui(config: &Config, state_dir: &str, handle: &TuiHandle) -> Result<()> {
+    run_loop_inner(config, state_dir, Some(handle))
+}
+
+fn output(handle: Option<&TuiHandle>, msg: String) {
+    if let Some(h) = handle {
+        h.push_log(msg);
+    } else {
+        println!("{}", msg);
+    }
+}
+
+fn run_loop_inner(config: &Config, state_dir: &str, tui: Option<&TuiHandle>) -> Result<()> {
     let goal = Goal::from_file(&config.goal)?;
     let mut state = LoopState::load(&state_path(state_dir, &config.state.file))?;
 
-    // Override path if empty (first run)
     if state.goal_path.is_empty() {
         state.goal_path = config.goal.clone();
     }
 
-    println!(
-        "\n{} {}",
-        "Goal:".bright_blue().bold(),
-        goal.summary().white()
+    output(
+        tui,
+        format!(
+            "{} {}",
+            "Goal:".bright_blue().bold(),
+            goal.summary().white()
+        ),
     );
-    println!(
-        "{} {}",
-        "Starting iteration".bright_blue().bold(),
-        (state.iteration + 1).to_string().cyan()
+    output(
+        tui,
+        format!(
+            "{} {}",
+            "Starting iteration".bright_blue().bold(),
+            (state.iteration + 1).to_string().cyan()
+        ),
     );
 
     let plan_agent = build_agent_config(config, true)?;
 
+    if let Some(h) = tui {
+        h.set_iteration(state.iteration + 1);
+        h.set_status("Planning");
+        h.set_phase("Plan");
+    }
+
     for iteration in state.iteration + 1..=config.max_iterations {
-        println!(
-            "\n{} {} {}/{}",
-            "─".repeat(50).dimmed(),
-            "Iteration".bold(),
-            iteration.to_string().cyan(),
-            config.max_iterations.to_string().dimmed()
-        );
+        let elapsed = if let Some(h) = tui {
+            h.set_iteration(iteration);
+            output(
+                tui,
+                format!(
+                    "{} {} {}/{}",
+                    "─".repeat(50).dimmed(),
+                    "Iteration".bold(),
+                    iteration.to_string().cyan(),
+                    config.max_iterations.to_string().dimmed()
+                ),
+            );
+            output(tui, "".to_string());
+            Instant::now()
+        } else {
+            output(
+                tui,
+                format!(
+                    "\n{} {} {}/{}",
+                    "─".repeat(50).dimmed(),
+                    "Iteration".bold(),
+                    iteration.to_string().cyan(),
+                    config.max_iterations.to_string().dimmed()
+                ),
+            );
+            Instant::now()
+        };
 
         // Phase 1: Plan
-        print!("  {} Planning next step...", "⏳".yellow());
-        std::io::stdout().flush().ok();
+        if let Some(h) = tui {
+            h.set_phase("Plan");
+            h.set_status("Planning next step");
+        }
+        output(tui, format!("  {} Planning next step...", "⏳".yellow()));
+        if tui.is_none() {
+            std::io::stdout().flush().ok();
+        }
         let plan = plan::plan_next_step(&plan_agent, &goal.raw, &state_to_string(&state))?;
-        print!(
-            "\r  {} Planned                              \n",
-            "✓".green()
+        output(tui, format!("\r  {} Planned", "✓".green()));
+        output(
+            tui,
+            format!("\n{} {}", "Plan:".green().bold(), plan.summary),
         );
-        std::io::stdout().flush().ok();
-        println!("\n{} {}", "Plan:".green().bold(), plan.summary);
         for task in &plan.sub_tasks {
-            println!("  {} {}", "→".cyan(), task);
+            output(tui, format!("  {} {}", "→".cyan(), task));
         }
 
         if !config.autopilot {
@@ -65,7 +118,7 @@ pub fn run_loop(config: &Config, state_dir: &str) -> Result<()> {
                 .unwrap_or(false);
 
             if !cont {
-                println!("{}", "Stopped by user.".yellow());
+                output(tui, format!("{}", "Stopped by user.".yellow()));
                 break;
             }
         }
@@ -79,12 +132,16 @@ pub fn run_loop(config: &Config, state_dir: &str) -> Result<()> {
             None
         };
 
-        let start = Instant::now();
-
         let (result, _used_parallel) = if let Some(pp) = parallel_plan {
-            println!("{} {}", "Parallel:".cyan().bold(), pp.sub_tasks.len());
+            if let Some(h) = tui {
+                h.set_phase("Parallel");
+            }
+            output(
+                tui,
+                format!("{} {}", "Parallel:".cyan().bold(), pp.sub_tasks.len()),
+            );
             for (i, task) in pp.sub_tasks.iter().enumerate() {
-                println!("  {} [Agent {}] {}", "▸".cyan(), i + 1, task);
+                output(tui, format!("  {} [Agent {}] {}", "▸".cyan(), i + 1, task));
             }
             let results = parallel::execute_parallel(pp, config)?;
             let combined = results
@@ -103,12 +160,21 @@ pub fn run_loop(config: &Config, state_dir: &str) -> Result<()> {
             (merged_result, true)
         } else {
             let exec_agent = build_agent_config(config, true)?;
-            print!(
-                "  {} Executing: {}",
-                "⏳".yellow(),
-                truncate(&plan.summary, 50)
+            if let Some(h) = tui {
+                h.set_phase("Execute");
+                h.set_status(&format!("Executing: {}", truncate(&plan.summary, 50)));
+            }
+            output(
+                tui,
+                format!(
+                    "  {} Executing: {}",
+                    "⏳".yellow(),
+                    truncate(&plan.summary, 50)
+                ),
             );
-            std::io::stdout().flush().ok();
+            if tui.is_none() {
+                std::io::stdout().flush().ok();
+            }
             let result = run_agent_with_stdin(
                 &exec_agent,
                 &format!(
@@ -126,22 +192,34 @@ Report what you did and any issues encountered."#,
             (result, false)
         };
 
-        let elapsed = start.elapsed();
-        print!(
-            "\r  {} Executed in {:.1}s (exit: {})      \n",
-            if result.success() {
-                "✓".green()
-            } else {
-                "✘".red()
-            },
-            elapsed.as_secs_f64(),
-            result.exit_code.to_string().yellow()
+        let exec_elapsed = elapsed.elapsed();
+        output(
+            tui,
+            format!(
+                "\r  {} Executed in {:.1}s (exit: {})",
+                if result.success() {
+                    "✓".green()
+                } else {
+                    "✘".red()
+                },
+                exec_elapsed.as_secs_f64(),
+                result.exit_code.to_string().yellow()
+            ),
         );
+        if let Some(h) = tui {
+            h.set_elapsed(exec_elapsed);
+        }
 
         // Phase 3: Verify
         let verifier_agent = build_agent_config(config, false)?;
-        print!("  {} Verifying progress...", "⏳".yellow());
-        std::io::stdout().flush().ok();
+        if let Some(h) = tui {
+            h.set_phase("Verify");
+            h.set_status("Verifying goal progress");
+        }
+        output(tui, format!("  {} Verifying progress...", "⏳".yellow()));
+        if tui.is_none() {
+            std::io::stdout().flush().ok();
+        }
 
         let verification = checker::verify_goal(
             &verifier_agent,
@@ -152,24 +230,26 @@ Report what you did and any issues encountered."#,
                 truncate(&result.stdout, 2000)
             ),
         )?;
-        print!("\r  {} Verified                              ", "✓".green());
-        std::io::stdout().flush().ok();
+        output(tui, format!("\r  {} Verified", "✓".green()));
 
         if verification.goal_met {
-            println!("\n{}", "✓ Goal achieved!".green().bold());
-            println!("  Reason: {}", verification.reason);
+            output(tui, format!("\n{}", "✓ Goal achieved!".green().bold()));
+            output(tui, format!("  Reason: {}", verification.reason));
             state.goal_met = true;
             state.last_plan = plan.summary;
             state.last_result = truncate(&result.stdout, 1000);
             state.iteration = iteration;
             state.save(&state_path(state_dir, &config.state.file))?;
+            if let Some(h) = tui {
+                h.set_status("Goal achieved!");
+            }
             return Ok(());
         }
 
-        println!();
-        println!("  {} {}", "◷".yellow(), verification.reason);
+        output(tui, String::new());
+        output(tui, format!("  {} {}", "◷".yellow(), verification.reason));
         for item in &verification.remaining_items {
-            println!("    {} {}", "•".dimmed(), item);
+            output(tui, format!("    {} {}", "•".dimmed(), item));
         }
 
         // Update state
@@ -177,12 +257,19 @@ Report what you did and any issues encountered."#,
         state.last_result = truncate(&result.stdout, 1000);
         state.iteration = iteration;
         state.save(&state_path(state_dir, &config.state.file))?;
+
+        if let Some(h) = tui {
+            h.set_status(&format!("Iteration {} complete", iteration));
+        }
     }
 
-    println!(
-        "\n{} Reached max iterations ({}) without meeting goal.",
-        "◼".red(),
-        config.max_iterations
+    output(
+        tui,
+        format!(
+            "\n{} Reached max iterations ({}) without meeting goal.",
+            "◼".red(),
+            config.max_iterations
+        ),
     );
     Ok(())
 }

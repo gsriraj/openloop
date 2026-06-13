@@ -381,6 +381,7 @@ dependencies = [
  "anyhow",
  "clap",
  "colored",
+ "crossterm",
  "inquire",
  "serde",
  "serde_json",
